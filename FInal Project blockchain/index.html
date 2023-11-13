@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Voting DApp</title>
+</head>
+<body>
+    <h1>Online Voting DApp</h1>
+    <p>Your Ethereum Address: <span id="playerAddress"></span></p>
+    <button onclick="connectWallet()">Connect Wallet</button>
+
+    <h2>Voting</h2>
+    <p>Choose a candidate to vote for:</p>
+    <select id="candidateSelect">
+        <!-- Candidate options will be populated dynamically -->
+    </select>
+    <button onclick="voteForCandidate()">Vote</button>
+
+    <h2>Results</h2>
+    <p>Candidates:</p>
+    <ul id="candidateList">
+        <!-- Candidates and their vote counts will be displayed here -->
+    </ul>
+
+    <button onclick="closeVoting()">Close Voting</button>
+    
+    <button onclick="getWinner()">Get Winner</button>
+    <p>Winner: <span id="winnerName"></span></p>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.3.5/web3.min.js"></script>
+    <script>
+        // Initialize Web3.js
+        var web3 = new Web3(Web3.givenProvider);
+
+        // Contract address and ABI (replace with your contract's address and ABI)
+        var contractAddress = '0xD2A13961F130cB50c9f5c5A64612bAAA5C5f5086';
+        var contractABI = [
+	{
+		"inputs": [],
+		"name": "closeVoting",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "openVoting",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string[]",
+				"name": "candidateNames",
+				"type": "string[]"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "candidateIndex",
+				"type": "uint256"
+			}
+		],
+		"name": "vote",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "voter",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "candidateIndex",
+				"type": "uint256"
+			}
+		],
+		"name": "Voted",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "candidates",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "voteCount",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "candidateIndex",
+				"type": "uint256"
+			}
+		],
+		"name": "getCandidate",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getCandidateCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getWinner",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "hasVoted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "owner",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "votingOpen",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
+
+        // Initialize contract instance
+        var contract = new web3.eth.Contract(contractABI, contractAddress);
+
+        // Player's Ethereum address
+        var playerAddress;
+
+        async function connectWallet() {
+            try {
+                if (typeof window.ethereum !== 'undefined') {
+                    await window.ethereum.enable();
+                    const accounts = await web3.eth.getAccounts();
+                    playerAddress = accounts[0];
+                    updateUI();
+                    alert('Wallet connected!');
+                    populateCandidates(); // Populate candidate options
+                    updateCandidateList(); // Display candidates and their vote counts
+                } else {
+                    alert('MetaMask not detected. Please install MetaMask and refresh the page.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred while connecting your wallet.');
+            }
+        }
+
+        function populateCandidates() {
+            // Replace with your candidate names
+            const candidateNames = ["Candidate 1", "Candidate 2", "Candidate 3", "Candidate 4"];
+
+            const candidateSelect = document.getElementById("candidateSelect");
+
+            candidateNames.forEach((name, index) => {
+                const option = document.createElement("option");
+                option.text = name;
+                option.value = index;
+                candidateSelect.add(option);
+            });
+        }
+
+        async function voteForCandidate() {
+            const candidateSelect = document.getElementById("candidateSelect");
+            const selectedCandidateIndex = candidateSelect.value;
+
+            try {
+                await contract.methods.vote(selectedCandidateIndex).send({
+                    from: playerAddress,
+                });
+                alert('Vote submitted successfully!');
+                updateCandidateList(); // Update vote counts
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred while voting.');
+            }
+        }
+
+        async function updateCandidateList() {
+            const candidateList = document.getElementById("candidateList");
+
+            while (candidateList.firstChild) {
+                candidateList.removeChild(candidateList.firstChild);
+            }
+
+            const candidateCount = await contract.methods.getCandidateCount().call();
+            for (let i = 0; i < candidateCount; i++) {
+                const candidateInfo = await contract.methods.getCandidate(i).call();
+                const listItem = document.createElement("li");
+                listItem.textContent = `${candidateInfo[0]}: ${candidateInfo[1]} votes`;
+                candidateList.appendChild(listItem);
+            }
+        }
+
+        async function closeVoting() {
+    try {
+        const accounts = await web3.eth.getAccounts();
+        playerAddress = accounts[0];
+        await contract.methods.closeVoting().send({
+            from: playerAddress,
+        });
+        alert('Voting is closed!');
+    } catch (error) {
+        console.error(error);
+        alert('An error occurred while closing the voting.');
+    }
+}
+
+
+        async function getWinner() {
+            try {
+                const winnerInfo = await contract.methods.getWinner().call();
+                const winnerName = winnerInfo[0];
+                const winnerVotes = winnerInfo[1];
+                document.getElementById("winnerName").textContent = winnerName;
+                alert(`The winner is ${winnerName} with ${winnerVotes} votes!`);
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred while getting the winner.');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById("playerAddress").textContent = playerAddress;
+        }
+
+        // Call updateUI initially to set the player's address
+        updateUI();
+    </script>
+</body>
+</html>
